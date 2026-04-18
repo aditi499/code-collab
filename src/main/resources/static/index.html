@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Code Collab Editor</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #0f1117;
+            color: white;
+        }
+
+        /* TOP BAR */
+        #topbar {
+            padding: 10px;
+            background: #161a22;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid #2a2f3a;
+        }
+
+        input, select {
+            padding: 8px;
+            border-radius: 6px;
+            border: none;
+            outline: none;
+            background: #1e2430;
+            color: white;
+        }
+
+        button {
+            padding: 8px 12px;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            background: #3b82f6;
+            color: white;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        #userCount {
+            margin-left: auto;
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        /* MAIN LAYOUT */
+        #main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* EDITOR */
+        #container {
+            flex: 3;
+            height: 100%;
+        }
+
+        /* SIDEBAR */
+        #chatPanel {
+            flex: 1;
+            background: #111827;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #2a2f3a;
+        }
+
+        .sectionTitle {
+            padding: 10px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #9ca3af;
+            border-bottom: 1px solid #2a2f3a;
+        }
+
+        #users, #messages, #activity {
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        #users {
+            border-bottom: 1px solid #2a2f3a;
+            max-height: 120px;
+        }
+
+        #messages {
+            flex: 1;
+        }
+
+        #activity {
+            font-size: 12px;
+            color: #9ca3af;
+            max-height: 100px;
+            border-top: 1px solid #2a2f3a;
+        }
+
+        /* CHAT INPUT */
+        #chatInputBox {
+            display: flex;
+            border-top: 1px solid #2a2f3a;
+        }
+
+        #chatInput {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            outline: none;
+            background: #1e2430;
+            color: white;
+        }
+
+        #sendBtn {
+            background: #22c55e;
+        }
+
+        /* OUTPUT */
+        #output-container {
+            height: 170px;
+            background: #0b0f17;
+            border-top: 1px solid #2a2f3a;
+            padding: 10px;
+        }
+
+        #output-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #facc15;
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            color: #22c55e;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+</head>
+
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+    <button onclick="runCode()">Run</button>
+
+    <select id="lang">
+        <option value="java">Java</option>
+        <option value="python">Python</option>
+        <option value="cpp">C++</option>
+    </select>
+
+    <input id="room" placeholder="Room ID" />
+    <input id="user" placeholder="Your Name" />
+
+    <button onclick="joinRoom()">Join Room</button>
+
+    <span id="userCount">Users: 0</span>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+    <div id="container"></div>
+
+    <div id="chatPanel">
+
+        <div class="sectionTitle">👥 Users</div>
+        <div id="users">No users</div>
+
+        <div class="sectionTitle">💬 Chat</div>
+        <div id="messages"></div>
+
+        <div class="sectionTitle">📡 Activity</div>
+        <div id="activity"></div>
+
+        <div id="chatInputBox">
+            <input id="chatInput" placeholder="Type message..." />
+            <button id="sendBtn" onclick="sendChat()">Send</button>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- OUTPUT -->
+<div id="output-container">
+    <div id="output-title">📤 Output</div>
+    <pre id="output">Click Run to execute code</pre>
+</div>
+
+<script>
+
+let editor;
+let socket;
+let ignore = false;
+
+/* ---------------- MONACO ---------------- */
+require.config({
+    paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" }
+});
+
+require(["vs/editor/editor.main"], function () {
+
+    editor = monaco.editor.create(document.getElementById("container"), {
+        value: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello World");
+    }
+}`,
+        language: "java",
+        theme: "vs-dark"
+    });
+
+    editor.onDidChangeModelContent(() => {
+
+        if (!socket || socket.readyState !== 1 || ignore) return;
+
+        socket.send(JSON.stringify({
+            type: "code",
+            room: document.getElementById("room").value,
+            user: document.getElementById("user").value,
+            content: editor.getValue()
+        }));
+    });
+});
+
+/* ---------------- JOIN ROOM ---------------- */
+function joinRoom() {
+
+    const room = document.getElementById("room").value.trim();
+    const user = document.getElementById("user").value.trim();
+
+    if (!room || !user) {
+        alert("Enter Room ID and Name");
+        return;
+    }
+
+    socket = new WebSocket("ws://localhost:8080/code");
+
+    socket.onopen = () => {
+        socket.send(JSON.stringify({
+            type: "join",
+            room,
+            user
+        }));
+    };
+
+    socket.onmessage = (event) => {
+
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "code") {
+            if (editor.getValue() !== msg.content) {
+                ignore = true;
+                editor.setValue(msg.content);
+                ignore = false;
+            }
+        }
+
+        if (msg.type === "chat") {
+            addMessage(msg.user, msg.content);
+        }
+
+        if (msg.type === "users") {
+            document.getElementById("userCount").innerText = "Users: " + msg.count;
+            updateUsers(msg.users);
+        }
+
+        if (msg.type === "system") {
+            addActivity(msg.content);
+        }
+    };
+}
+
+/* ---------------- USERS ---------------- */
+function updateUsers(users) {
+
+    const box = document.getElementById("users");
+    box.innerHTML = "";
+
+    users.forEach(u => {
+        const div = document.createElement("div");
+        div.innerText = "🟢 " + u;
+        box.appendChild(div);
+    });
+}
+
+/* ---------------- CHAT ---------------- */
+function sendChat() {
+
+    const text = document.getElementById("chatInput").value.trim();
+    if (!text || !socket) return;
+
+    socket.send(JSON.stringify({
+        type: "chat",
+        room: document.getElementById("room").value,
+        user: document.getElementById("user").value,
+        content: text
+    }));
+
+    document.getElementById("chatInput").value = "";
+}
+
+function addMessage(user, text) {
+
+    const box = document.getElementById("messages");
+
+    const div = document.createElement("div");
+    div.innerHTML = `<b style="color:#38bdf8">${user}</b>: ${text}`;
+
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+}
+
+/* ---------------- ACTIVITY ---------------- */
+function addActivity(text) {
+
+    const box = document.getElementById("activity");
+
+    const div = document.createElement("div");
+    div.innerText = text;
+
+    box.appendChild(div);
+}
+
+/* ---------------- RUN CODE ---------------- */
+function runCode() {
+
+    document.getElementById("output").innerText = "Running...";
+
+    fetch("http://localhost:8080/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            language: document.getElementById("lang").value,
+            code: editor.getValue()
+        })
+    })
+    .then(res => res.text())
+    .then(data => {
+        document.getElementById("output").innerText = data;
+    });
+}
+
+</script>
+
+</body>
+</html>

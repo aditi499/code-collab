@@ -22,13 +22,15 @@ public class CodeController {
     public ResponseEntity<String> runCode(@RequestBody CodeRequest req) {
 
         try {
+            if (req == null || req.code == null || req.language == null) {
+                return ResponseEntity.ok("No code or language provided");
+            }
+
             RestTemplate restTemplate = new RestTemplate();
 
             Map<String, Object> payload = new HashMap<>();
 
-            String language = mapLanguage(req.language);
-
-            payload.put("language", language);
+            payload.put("language", mapLanguage(req.language));
             payload.put("version", "*");
 
             Map<String, String> file = new HashMap<>();
@@ -39,7 +41,8 @@ public class CodeController {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+            HttpEntity<Map<String, Object>> entity =
+                    new HttpEntity<>(payload, headers);
 
             ResponseEntity<Map> response =
                     restTemplate.postForEntity(PISTON_URL, entity, Map.class);
@@ -47,25 +50,27 @@ public class CodeController {
             Map body = response.getBody();
 
             if (body == null) {
-                return ResponseEntity.ok("No output");
+                return ResponseEntity.ok("No output from API");
             }
 
-            Object run = body.get("run");
+            Map run = (Map) body.get("run");
 
-            if (run instanceof Map) {
-                Map runMap = (Map) run;
-
-                String output = (String) runMap.get("stdout");
-                String error = (String) runMap.get("stderr");
-
-                if (error != null && !error.isEmpty()) {
-                    return ResponseEntity.ok(error);
-                }
-
-                return ResponseEntity.ok(output != null ? output : "No output");
+            if (run == null) {
+                return ResponseEntity.ok("Execution failed");
             }
 
-            return ResponseEntity.ok("Invalid response from execution API");
+            String stdout = (String) run.get("stdout");
+            String stderr = (String) run.get("stderr");
+
+            if (stderr != null && !stderr.isEmpty()) {
+                return ResponseEntity.ok(stderr);
+            }
+
+            if (stdout != null && !stdout.isEmpty()) {
+                return ResponseEntity.ok(stdout);
+            }
+
+            return ResponseEntity.ok("No output");
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -80,6 +85,7 @@ public class CodeController {
 
         return switch (lang.toLowerCase()) {
             case "cpp" -> "cpp";
+            case "c++" -> "cpp";
             case "python" -> "python3";
             case "java" -> "java";
             default -> "java";

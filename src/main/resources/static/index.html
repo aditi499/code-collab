@@ -245,7 +245,7 @@ function joinRoom() {
         return;
     }
 
-    socket = new WebSocket("ws://localhost:8080/code");
+    socket = new WebSocket("https://code-collab-production.up.railway.app/");
 
     socket.onopen = () => {
         socket.send(JSON.stringify({
@@ -338,7 +338,7 @@ function runCode() {
 
     document.getElementById("output").innerText = "Running...";
 
-    fetch("http://localhost:8080/run", {
+    fetch("https://code-collab-production.up.railway.app/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

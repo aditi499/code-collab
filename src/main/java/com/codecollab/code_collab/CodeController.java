@@ -22,22 +22,26 @@ public class CodeController {
     public ResponseEntity<String> runCode(@RequestBody CodeRequest req) {
 
         try {
+
             if (req == null || req.code == null || req.language == null) {
                 return ResponseEntity.ok("No code or language provided");
             }
 
             RestTemplate restTemplate = new RestTemplate();
 
+            // ---------------- PAYLOAD ----------------
             Map<String, Object> payload = new HashMap<>();
 
             payload.put("language", mapLanguage(req.language));
             payload.put("version", "*");
 
-            Map<String, String> file = new HashMap<>();
+            Map<String, Object> file = new HashMap<>();
+            file.put("name", getFileName(req.language));
             file.put("content", req.code);
 
             payload.put("files", new Object[]{file});
 
+            // ---------------- REQUEST ----------------
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -50,23 +54,24 @@ public class CodeController {
             Map body = response.getBody();
 
             if (body == null) {
-                return ResponseEntity.ok("No output from API");
+                return ResponseEntity.ok("No response from execution server");
             }
 
+            // ---------------- RESULT ----------------
             Map run = (Map) body.get("run");
 
             if (run == null) {
                 return ResponseEntity.ok("Execution failed");
             }
 
-            String stdout = (String) run.get("stdout");
-            String stderr = (String) run.get("stderr");
+            String stdout = run.get("stdout") != null ? run.get("stdout").toString() : "";
+            String stderr = run.get("stderr") != null ? run.get("stderr").toString() : "";
 
-            if (stderr != null && !stderr.isEmpty()) {
+            if (!stderr.isEmpty()) {
                 return ResponseEntity.ok(stderr);
             }
 
-            if (stdout != null && !stdout.isEmpty()) {
+            if (!stdout.isEmpty()) {
                 return ResponseEntity.ok(stdout);
             }
 
@@ -84,11 +89,22 @@ public class CodeController {
         if (lang == null) return "java";
 
         return switch (lang.toLowerCase()) {
-            case "cpp" -> "cpp";
-            case "c++" -> "cpp";
+            case "cpp", "c++" -> "cpp";
             case "python" -> "python3";
             case "java" -> "java";
             default -> "java";
+        };
+    }
+
+    // ---------------- FILE NAME HELPER ----------------
+    private String getFileName(String lang) {
+
+        if (lang == null) return "Main.java";
+
+        return switch (lang.toLowerCase()) {
+            case "cpp", "c++" -> "main.cpp";
+            case "python" -> "main.py";
+            default -> "Main.java";
         };
     }
 }

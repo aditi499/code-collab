@@ -74,6 +74,13 @@
             background: #0b0f17;
             padding: 10px;
         }
+
+        .section-title {
+            padding: 8px 10px;
+            font-weight: bold;
+            color: #93c5fd;
+            border-bottom: 1px solid #2a2f3a;
+        }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
@@ -102,10 +109,10 @@
     <div id="container"></div>
 
     <div id="chatPanel">
-        <div>Users</div>
+
+        <div class="section-title">Let’s talk</div>
         <div id="users"></div>
 
-        <div>Chat</div>
         <div id="messages"></div>
 
         <input id="chatInput" placeholder="Type message..." />
@@ -114,6 +121,7 @@
 </div>
 
 <div id="output-container">
+    <div class="section-title">Output</div>
     <pre id="output">Click Run to execute code</pre>
 </div>
 
@@ -140,6 +148,19 @@ require(["vs/editor/editor.main"], function () {
         language: "java",
         theme: "vs-dark"
     });
+
+    // ---------------- REAL-TIME SYNC (ADDED FIX) ----------------
+    editor.onDidChangeModelContent(() => {
+
+        if (!socket || socket.readyState !== 1) return;
+
+        socket.send(JSON.stringify({
+            type: "code",
+            room: document.getElementById("room").value,
+            user: document.getElementById("user").value,
+            content: editor.getValue()
+        }));
+    });
 });
 
 // ---------------- JOIN ROOM ----------------
@@ -153,7 +174,6 @@ function joinRoom() {
         return;
     }
 
-    // close old socket safely
     if (socket) {
         socket.close();
         socket = null;
@@ -161,17 +181,14 @@ function joinRoom() {
 
     socket = new WebSocket(`wss://code-collab-production.up.railway.app/code`);
 
-    // ---------------- DEBUG ----------------
     socket.onerror = (e) => console.log("WebSocket error:", e);
     socket.onclose = () => console.log("WebSocket closed");
 
-    // ---------------- OPEN ----------------
     socket.onopen = () => {
         console.log("WebSocket connected");
         socket.send(JSON.stringify({ type: "join", room, user }));
     };
 
-    // ---------------- MESSAGE ----------------
     socket.onmessage = (event) => {
 
         let msg;

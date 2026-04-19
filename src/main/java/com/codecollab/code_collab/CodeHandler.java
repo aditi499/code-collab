@@ -30,7 +30,7 @@ public class CodeHandler extends TextWebSocketHandler {
         String user = json.has("user") ? json.get("user").asText() : "anonymous";
         String content = json.has("content") ? json.get("content").asText() : "";
 
-        // ✅ FIX: clean previous session before re-joining
+        // ---------------- JOIN ROOM ----------------
         if ("join".equals(type)) {
 
             RoomManager.removeUserFromAllRooms(session);
@@ -49,6 +49,22 @@ public class CodeHandler extends TextWebSocketHandler {
             RoomManager.addUser(room, session, user);
         }
 
+        // ---------------- REAL-TIME CODE SYNC ----------------
+        if ("code".equals(type)) {
+
+            Set<WebSocketSession> users = RoomManager.getRoom(room);
+
+            for (WebSocketSession s : users) {
+
+                if (s.isOpen() && !s.equals(session)) {
+                    s.sendMessage(message); // forward raw message
+                }
+            }
+
+            return;
+        }
+
+        // ---------------- CHAT / DEFAULT MESSAGE ----------------
         Message msg = new Message(type, room, user, content);
         String broadcastMsg = mapper.writeValueAsString(msg);
 
@@ -63,6 +79,7 @@ public class CodeHandler extends TextWebSocketHandler {
         broadcastUserList(room);
     }
 
+    // ---------------- USERS ----------------
     private void broadcastUserList(String room) throws Exception {
 
         List<String> usersList = RoomManager.getUserList(room);
@@ -83,6 +100,7 @@ public class CodeHandler extends TextWebSocketHandler {
         }
     }
 
+    // ---------------- SYSTEM ----------------
     private void broadcastSystem(String room, String text) throws Exception {
 
         ObjectNode msg = mapper.createObjectNode();
@@ -100,6 +118,7 @@ public class CodeHandler extends TextWebSocketHandler {
         }
     }
 
+    // ---------------- CLEANUP ----------------
     @Override
     public void afterConnectionClosed(WebSocketSession session,
                                       org.springframework.web.socket.CloseStatus status) {

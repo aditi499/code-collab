@@ -2,6 +2,7 @@ package com.codecollab.code_collab;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
@@ -17,24 +18,24 @@ public class CodeHandler extends TextWebSocketHandler {
 
     ObjectMapper mapper = new ObjectMapper();
 
-    // store session metadata
-    private final java.util.Map<WebSocketSession, String> sessionRoom = new java.util.concurrent.ConcurrentHashMap<>();
+    private final ConcurrentHashMap<WebSocketSession, String> sessionRoom = new ConcurrentHashMap<>();
 
-    // ---------------- MESSAGE ----------------
     @Override
     public void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
 
         JsonNode json = mapper.readTree(message.getPayload());
 
-        String type = json.has("type") ? json.get("type").asText() : "";
+        String type = json.has("type") ? json.get("type").asText() : "chat";
         String room = json.has("room") ? json.get("room").asText() : "";
-        String user = json.has("user") ? json.get("user").asText() : "";
+        String user = json.has("user") ? json.get("user").asText() : "anonymous";
         String content = json.has("content") ? json.get("content").asText() : "";
 
+        // ✅ FIX: clean previous session before re-joining
         if ("join".equals(type)) {
 
-            sessionRoom.put(session, room);
+            RoomManager.removeUserFromAllRooms(session);
 
+            sessionRoom.put(session, room);
             RoomManager.addUser(room, session, user);
 
             broadcastSystem(room, user + " joined the room");
@@ -42,10 +43,10 @@ public class CodeHandler extends TextWebSocketHandler {
             return;
         }
 
-        // fallback safety
-        if (!room.isEmpty() && !user.isEmpty()) {
-            RoomManager.addUser(room, session, user);
+        // ensure session tracked
+        if (!room.isEmpty()) {
             sessionRoom.putIfAbsent(session, room);
+            RoomManager.addUser(room, session, user);
         }
 
         Message msg = new Message(type, room, user, content);
@@ -62,7 +63,6 @@ public class CodeHandler extends TextWebSocketHandler {
         broadcastUserList(room);
     }
 
-    // ---------------- USERS ----------------
     private void broadcastUserList(String room) throws Exception {
 
         List<String> usersList = RoomManager.getUserList(room);
@@ -83,7 +83,6 @@ public class CodeHandler extends TextWebSocketHandler {
         }
     }
 
-    // ---------------- SYSTEM ----------------
     private void broadcastSystem(String room, String text) throws Exception {
 
         ObjectNode msg = mapper.createObjectNode();
@@ -101,7 +100,6 @@ public class CodeHandler extends TextWebSocketHandler {
         }
     }
 
-    // ---------------- CLEANUP ----------------
     @Override
     public void afterConnectionClosed(WebSocketSession session,
                                       org.springframework.web.socket.CloseStatus status) {

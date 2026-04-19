@@ -1,98 +1,88 @@
 package com.codecollab.code_collab;
 
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
+import java.util.HashMap;
+import java.util.Map;
 
-import java.util.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 @RestController
 public class CodeController {
 
-    private static final String JUDGE0_URL =
-            "https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true";
-
-    // 🔑 PUT YOUR REAL RAPIDAPI KEY HERE
-    private static final String API_KEY = "YOUR_REAL_RAPIDAPI_KEY";
+    private final String PISTON_URL = "https://emkc.org/api/v2/piston/execute";
 
     @PostMapping("/run")
-    public String runCode(@RequestBody CodeRequest req) {
+    public ResponseEntity<String> runCode(@RequestBody CodeRequest req) {
 
         try {
-            if (req == null || req.code == null) {
-                return "No code provided";
-            }
-
-            // ---------------- REQUEST BODY ----------------
-            Map<String, Object> body = new HashMap<>();
-            body.put("source_code", req.code);
-            body.put("language_id", getLanguageId(req.language));
-            body.put("stdin", "");
-
-            // ---------------- HEADERS ----------------
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("X-RapidAPI-Key", API_KEY);
-            headers.set("X-RapidAPI-Host", "judge0-ce.p.rapidapi.com");
-
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-
             RestTemplate restTemplate = new RestTemplate();
 
-            // ---------------- CALL JUDGE0 ----------------
-            ResponseEntity<Map> response = restTemplate.exchange(
-                    JUDGE0_URL,
-                    HttpMethod.POST,
-                    entity,
-                    Map.class
-            );
+            Map<String, Object> payload = new HashMap<>();
 
-            Map result = response.getBody();
+            String language = mapLanguage(req.language);
 
-            // ---------------- SAFETY CHECK ----------------
-            if (result == null) {
-                return "No response from Judge0";
+            payload.put("language", language);
+            payload.put("version", "*");
+
+            Map<String, String> file = new HashMap<>();
+            file.put("content", req.code);
+
+            payload.put("files", new Object[]{file});
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+
+            ResponseEntity<Map> response =
+                    restTemplate.postForEntity(PISTON_URL, entity, Map.class);
+
+            Map body = response.getBody();
+
+            if (body == null) {
+                return ResponseEntity.ok("No output");
             }
 
-            // ---------------- OUTPUT HANDLING ----------------
+            Object run = body.get("run");
 
-            Object compileError = result.get("compile_output");
-            if (compileError != null) {
-                return "Compilation Error:\n" + compileError;
+            if (run instanceof Map) {
+                Map runMap = (Map) run;
+
+                String output = (String) runMap.get("stdout");
+                String error = (String) runMap.get("stderr");
+
+                if (error != null && !error.isEmpty()) {
+                    return ResponseEntity.ok(error);
+                }
+
+                return ResponseEntity.ok(output != null ? output : "No output");
             }
 
-            Object stderr = result.get("stderr");
-            if (stderr != null) {
-                return "Runtime Error:\n" + stderr;
-            }
-
-            Object stdout = result.get("stdout");
-            if (stdout != null) {
-                return stdout.toString();
-            }
-
-            Object message = result.get("message");
-            if (message != null) {
-                return message.toString();
-            }
-
-            return result.toString();
+            return ResponseEntity.ok("Invalid response from execution API");
 
         } catch (Exception e) {
-            return "Server Error: " + e.getMessage();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Server Error: " + e.getMessage());
         }
     }
 
     // ---------------- LANGUAGE MAPPING ----------------
-    private int getLanguageId(String lang) {
+    private String mapLanguage(String lang) {
 
-        if (lang == null) return 71;
+        if (lang == null) return "java";
 
         return switch (lang.toLowerCase()) {
-            case "java" -> 62;
-            case "python" -> 71;
-            case "cpp" -> 54;
-            default -> 71;
+            case "cpp" -> "cpp";
+            case "python" -> "python3";
+            case "java" -> "java";
+            default -> "java";
         };
     }
 }

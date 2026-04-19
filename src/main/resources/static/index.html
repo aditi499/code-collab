@@ -1,85 +1,82 @@
 <!DOCTYPE html>
-
 <html>
 <head>
     <title>Code Collab Editor</title>
 
-```
-<style>
-    body {
-        margin: 0;
-        font-family: "Segoe UI", Arial, sans-serif;
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-        background: #0f1117;
-        color: white;
-    }
+    <style>
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #0f1117;
+            color: white;
+        }
 
-    #topbar {
-        padding: 10px;
-        background: #161a22;
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        border-bottom: 1px solid #2a2f3a;
-    }
+        #topbar {
+            padding: 10px;
+            background: #161a22;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid #2a2f3a;
+        }
 
-    input, select {
-        padding: 8px;
-        border-radius: 6px;
-        border: none;
-        outline: none;
-        background: #1e2430;
-        color: white;
-    }
+        input, select {
+            padding: 8px;
+            border-radius: 6px;
+            border: none;
+            outline: none;
+            background: #1e2430;
+            color: white;
+        }
 
-    button {
-        padding: 8px 12px;
-        cursor: pointer;
-        border: none;
-        border-radius: 6px;
-        background: #3b82f6;
-        color: white;
-    }
+        button {
+            padding: 8px 12px;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            background: #3b82f6;
+            color: white;
+        }
 
-    #userCount {
-        margin-left: auto;
-        color: #22c55e;
-        font-weight: bold;
-    }
+        #userCount {
+            margin-left: auto;
+            color: #22c55e;
+            font-weight: bold;
+        }
 
-    #main {
-        flex: 1;
-        display: flex;
-    }
+        #main {
+            flex: 1;
+            display: flex;
+        }
 
-    #container {
-        flex: 3;
-    }
+        #container {
+            flex: 3;
+        }
 
-    #chatPanel {
-        flex: 1;
-        background: #111827;
-        display: flex;
-        flex-direction: column;
-    }
+        #chatPanel {
+            flex: 1;
+            background: #111827;
+            display: flex;
+            flex-direction: column;
+        }
 
-    #users, #messages, #activity {
-        padding: 10px;
-        overflow-y: auto;
-    }
+        #users, #messages {
+            padding: 10px;
+            overflow-y: auto;
+            height: 200px;
+        }
 
-    #output-container {
-        height: 170px;
-        background: #0b0f17;
-        padding: 10px;
-    }
-</style>
+        #output-container {
+            height: 170px;
+            background: #0b0f17;
+            padding: 10px;
+        }
+    </style>
 
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
-```
-
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
 </head>
 
 <body>
@@ -87,39 +84,33 @@
 <div id="topbar">
     <button onclick="runCode()">Run</button>
 
-```
-<select id="lang">
-    <option value="java">Java</option>
-    <option value="python">Python</option>
-    <option value="cpp">C++</option>
-</select>
+    <select id="lang">
+        <option value="java">Java</option>
+        <option value="python">Python</option>
+        <option value="cpp">C++</option>
+    </select>
 
-<input id="room" placeholder="Room ID" />
-<input id="user" placeholder="Your Name" />
+    <input id="room" placeholder="Room ID" />
+    <input id="user" placeholder="Your Name" />
 
-<button onclick="joinRoom()">Join Room</button>
+    <button onclick="joinRoom()">Join Room</button>
 
-<span id="userCount">Users: 0</span>
-```
-
+    <span id="userCount">Users: 0</span>
 </div>
 
 <div id="main">
     <div id="container"></div>
 
-```
-<div id="chatPanel">
-    <div>Users</div>
-    <div id="users"></div>
+    <div id="chatPanel">
+        <div>Users</div>
+        <div id="users"></div>
 
-    <div>Chat</div>
-    <div id="messages"></div>
+        <div>Chat</div>
+        <div id="messages"></div>
 
-    <input id="chatInput" placeholder="Type message..." />
-    <button onclick="sendChat()">Send</button>
-</div>
-```
-
+        <input id="chatInput" placeholder="Type message..." />
+        <button onclick="sendChat()">Send</button>
+    </div>
 </div>
 
 <div id="output-container">
@@ -129,11 +120,11 @@
 <script>
 
 let editor;
-let socket;
-let ignore = false;
+let socket = null;
 
 const BASE_URL = "https://code-collab-production.up.railway.app";
 
+// ---------------- MONACO EDITOR ----------------
 require.config({
     paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" }
 });
@@ -149,20 +140,9 @@ require(["vs/editor/editor.main"], function () {
         language: "java",
         theme: "vs-dark"
     });
-
-    editor.onDidChangeModelContent(() => {
-
-        if (!socket || socket.readyState !== 1 || ignore) return;
-
-        socket.send(JSON.stringify({
-            type: "code",
-            room: document.getElementById("room").value,
-            user: document.getElementById("user").value,
-            content: editor.getValue()
-        }));
-    });
 });
 
+// ---------------- JOIN ROOM ----------------
 function joinRoom() {
 
     const room = document.getElementById("room").value.trim();
@@ -173,41 +153,70 @@ function joinRoom() {
         return;
     }
 
-    socket = new WebSocket(`wss://code-collab-production.up.railway.app/ws`);
+    // close old socket safely
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
 
+    socket = new WebSocket(`wss://code-collab-production.up.railway.app/code`);
+
+    // ---------------- DEBUG ----------------
+    socket.onerror = (e) => console.log("WebSocket error:", e);
+    socket.onclose = () => console.log("WebSocket closed");
+
+    // ---------------- OPEN ----------------
     socket.onopen = () => {
+        console.log("WebSocket connected");
         socket.send(JSON.stringify({ type: "join", room, user }));
     };
 
+    // ---------------- MESSAGE ----------------
     socket.onmessage = (event) => {
 
-        const msg = JSON.parse(event.data);
+        let msg;
+        try {
+            msg = JSON.parse(event.data);
+        } catch (e) {
+            console.log("Invalid message:", event.data);
+            return;
+        }
 
-        if (msg.type === "code") {
+        // CODE SYNC
+        if (msg.type === "code" && msg.content) {
             if (editor.getValue() !== msg.content) {
-                ignore = true;
                 editor.setValue(msg.content);
-                ignore = false;
             }
         }
 
+        // CHAT
         if (msg.type === "chat") {
             const div = document.createElement("div");
-            div.innerText = msg.user + ": " + msg.content;
+            div.innerText = `${msg.user}: ${msg.content}`;
             document.getElementById("messages").appendChild(div);
         }
 
+        // USERS
         if (msg.type === "users") {
             document.getElementById("userCount").innerText = "Users: " + msg.count;
-            document.getElementById("users").innerText = msg.users.join(", ");
+            document.getElementById("users").innerText = (msg.users || []).join(", ");
+        }
+
+        // SYSTEM
+        if (msg.type === "system") {
+            const div = document.createElement("div");
+            div.style.color = "gray";
+            div.innerText = msg.content;
+            document.getElementById("messages").appendChild(div);
         }
     };
 }
 
+// ---------------- CHAT ----------------
 function sendChat() {
 
     const text = document.getElementById("chatInput").value.trim();
-    if (!text || !socket) return;
+    if (!text || !socket || socket.readyState !== 1) return;
 
     socket.send(JSON.stringify({
         type: "chat",
@@ -219,6 +228,7 @@ function sendChat() {
     document.getElementById("chatInput").value = "";
 }
 
+// ---------------- RUN CODE ----------------
 function runCode() {
 
     document.getElementById("output").innerText = "Running...";
@@ -237,6 +247,7 @@ function runCode() {
     })
     .catch(err => {
         document.getElementById("output").innerText = "Error running code";
+        console.log(err);
     });
 }
 

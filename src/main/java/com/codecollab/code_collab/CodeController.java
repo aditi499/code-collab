@@ -16,8 +16,7 @@ import org.springframework.web.client.RestTemplate;
 @RestController
 public class CodeController {
 
-    // ✅ FIXED ENDPOINT (this is the real stable one)
-    private final String PISTON_URL = "https://emkc.org/api/v2/piston/runs";
+    private final String PISTON_URL = "https://emkc.org/api/v2/piston/execute";
 
     @PostMapping("/run")
     public ResponseEntity<String> runCode(@RequestBody CodeRequest req) {
@@ -55,10 +54,9 @@ public class CodeController {
             Map body = response.getBody();
 
             if (body == null) {
-                return ResponseEntity.ok("No response from execution server");
+                return ResponseEntity.ok("No response from Piston API");
             }
 
-            // ---------------- RESULT ----------------
             Map run = (Map) body.get("run");
 
             if (run == null) {
@@ -68,13 +66,9 @@ public class CodeController {
             String stdout = run.get("stdout") != null ? run.get("stdout").toString() : "";
             String stderr = run.get("stderr") != null ? run.get("stderr").toString() : "";
 
-            if (!stderr.isEmpty()) {
-                return ResponseEntity.ok(stderr);
-            }
+            if (!stderr.isEmpty()) return ResponseEntity.ok(stderr);
 
-            if (!stdout.isEmpty()) {
-                return ResponseEntity.ok(stdout);
-            }
+            if (!stdout.isEmpty()) return ResponseEntity.ok(stdout);
 
             return ResponseEntity.ok("No output");
 

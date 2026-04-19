@@ -5,7 +5,6 @@ import java.util.Map;
 
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,73 +15,66 @@ import org.springframework.web.client.RestTemplate;
 @RestController
 public class CodeController {
 
-    private final String PISTON_URL = "https://emkc.org/api/v2/piston/execute";
+    // 🔴 REPLACE THESE WITH YOUR REAL JDoodle KEYS
+    private final String CLIENT_ID = "8476132b8635e3c9d2c4be34e1fe24dd";
+    private final String CLIENT_SECRET = "3a4d40d7199a032b69428a0af528e5ea54a37146cc0fc18be534a71543e81500";
+
+    private final String JD_URL = "https://api.jdoodle.com/v1/execute";
 
     @PostMapping("/run")
     public ResponseEntity<String> runCode(@RequestBody CodeRequest req) {
 
         try {
 
-            // ---------------- VALIDATION ----------------
             if (req == null || req.code == null || req.language == null) {
                 return ResponseEntity.ok("No code or language provided");
             }
 
             RestTemplate restTemplate = new RestTemplate();
 
-            // ---------------- REQUEST PAYLOAD ----------------
             Map<String, Object> payload = new HashMap<>();
-            payload.put("language", mapLanguage(req.language));
-            payload.put("version", "*");
 
-            Map<String, String> file = new HashMap<>();
-            file.put("name", getFileName(req.language));
-            file.put("content", req.code);
+            payload.put("clientId", CLIENT_ID);
+            payload.put("clientSecret", CLIENT_SECRET);
+            payload.put("script", req.code);
 
-            payload.put("files", new Object[]{file});
+            // ---------------- LANGUAGE ----------------
+            String lang = mapLanguage(req.language);
 
-            // ---------------- HEADERS ----------------
+            payload.put("language", lang);
+
+            // ---------------- VERSION INDEX FIX ----------------
+            if (lang.equals("java")) {
+                payload.put("versionIndex", "4");
+            } else if (lang.equals("python3")) {
+                payload.put("versionIndex", "4");
+            } else {
+                payload.put("versionIndex", "0");
+            }
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             HttpEntity<Map<String, Object>> entity =
                     new HttpEntity<>(payload, headers);
 
-            // ---------------- API CALL ----------------
             ResponseEntity<Map> response =
-                    restTemplate.postForEntity(PISTON_URL, entity, Map.class);
+                    restTemplate.postForEntity(JD_URL, entity, Map.class);
 
             Map body = response.getBody();
 
             if (body == null) {
-                return ResponseEntity.ok("No response from execution server");
+                return ResponseEntity.ok("No response from JDoodle");
             }
 
-            // ---------------- SAFE RESPONSE HANDLING ----------------
-            Object runObj = body.get("run");
+            String output = body.get("output") != null
+                    ? body.get("output").toString()
+                    : "No output";
 
-            if (!(runObj instanceof Map)) {
-                return ResponseEntity.ok("Execution failed or invalid response");
-            }
-
-            Map run = (Map) runObj;
-
-            String stdout = run.get("stdout") != null ? run.get("stdout").toString() : "";
-            String stderr = run.get("stderr") != null ? run.get("stderr").toString() : "";
-
-            if (!stderr.isEmpty()) {
-                return ResponseEntity.ok(stderr);
-            }
-
-            if (!stdout.isEmpty()) {
-                return ResponseEntity.ok(stdout);
-            }
-
-            return ResponseEntity.ok("No output");
+            return ResponseEntity.ok(output);
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Execution Error: " + e.getMessage());
+            return ResponseEntity.ok("Execution Error: " + e.getMessage());
         }
     }
 
@@ -92,22 +84,10 @@ public class CodeController {
         if (lang == null) return "java";
 
         return switch (lang.toLowerCase()) {
-            case "cpp", "c++" -> "cpp";
+            case "cpp", "c++" -> "cpp17";
             case "python" -> "python3";
             case "java" -> "java";
             default -> "java";
-        };
-    }
-
-    // ---------------- FILE NAME ----------------
-    private String getFileName(String lang) {
-
-        if (lang == null) return "Main.java";
-
-        return switch (lang.toLowerCase()) {
-            case "cpp", "c++" -> "main.cpp";
-            case "python" -> "main.py";
-            default -> "Main.java";
         };
     }
 }

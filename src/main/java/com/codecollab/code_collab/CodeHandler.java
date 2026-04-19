@@ -25,15 +25,13 @@ public class CodeHandler extends TextWebSocketHandler {
 
         JsonNode json = mapper.readTree(message.getPayload());
 
-        String type = json.has("type") ? json.get("type").asText() : "";
+        String type = json.has("type") ? json.get("type").asText() : "chat";
         String room = json.has("room") ? json.get("room").asText() : "";
         String user = json.has("user") ? json.get("user").asText() : "anonymous";
         String content = json.has("content") ? json.get("content").asText() : "";
 
         // ---------------- JOIN ----------------
         if ("join".equals(type)) {
-
-            if (room.isEmpty()) return;
 
             RoomManager.removeUserFromAllRooms(session);
 
@@ -45,35 +43,45 @@ public class CodeHandler extends TextWebSocketHandler {
             return;
         }
 
-        if (room.isEmpty()) return;
+        // ---------------- ENSURE ROOM ----------------
+        if (!room.isEmpty()) {
+            sessionRoom.putIfAbsent(session, room);
+            RoomManager.addUser(room, session, user);
+        }
 
-        sessionRoom.putIfAbsent(session, room);
-        RoomManager.addUser(room, session, user);
+        Set<WebSocketSession> users = RoomManager.getRoom(room);
 
-        // ---------------- CODE SYNC (FIXED) ----------------
+        // ---------------- CODE SYNC FIX ----------------
         if ("code".equals(type)) {
-
-            Set<WebSocketSession> users = RoomManager.getRoom(room);
 
             for (WebSocketSession s : users) {
 
-                // send ONLY to others in same room
+                // IMPORTANT: don't send back to sender
                 if (s.isOpen() && !s.equals(session)) {
-                    s.sendMessage(new TextMessage(message.getPayload()));
+
+                    ObjectNode msg = mapper.createObjectNode();
+                    msg.put("type", "code");
+                    msg.put("content", content);
+
+                    s.sendMessage(new TextMessage(msg.toString()));
                 }
             }
+
             return;
         }
 
         // ---------------- CHAT ----------------
-        Message msg = new Message(type, room, user, content);
-        String broadcastMsg = mapper.writeValueAsString(msg);
+        ObjectNode msg = mapper.createObjectNode();
+        msg.put("type", type);
+        msg.put("room", room);
+        msg.put("user", user);
+        msg.put("content", content);
 
-        Set<WebSocketSession> users = RoomManager.getRoom(room);
+        String jsonMsg = mapper.writeValueAsString(msg);
 
         for (WebSocketSession s : users) {
             if (s.isOpen()) {
-                s.sendMessage(new TextMessage(broadcastMsg));
+                s.sendMessage(new TextMessage(jsonMsg));
             }
         }
 

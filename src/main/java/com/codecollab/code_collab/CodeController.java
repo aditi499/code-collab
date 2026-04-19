@@ -23,15 +23,15 @@ public class CodeController {
 
         try {
 
+            // ---------------- VALIDATION ----------------
             if (req == null || req.code == null || req.language == null) {
                 return ResponseEntity.ok("No code or language provided");
             }
 
             RestTemplate restTemplate = new RestTemplate();
 
-            // ---------------- PAYLOAD ----------------
+            // ---------------- REQUEST PAYLOAD ----------------
             Map<String, Object> payload = new HashMap<>();
-
             payload.put("language", mapLanguage(req.language));
             payload.put("version", "*");
 
@@ -41,23 +41,24 @@ public class CodeController {
 
             payload.put("files", new Object[]{file});
 
-            // ---------------- REQUEST ----------------
+            // ---------------- HEADERS ----------------
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             HttpEntity<Map<String, Object>> entity =
                     new HttpEntity<>(payload, headers);
 
+            // ---------------- API CALL ----------------
             ResponseEntity<Map> response =
                     restTemplate.postForEntity(PISTON_URL, entity, Map.class);
 
             Map body = response.getBody();
 
             if (body == null) {
-                return ResponseEntity.ok("No response from API");
+                return ResponseEntity.ok("No response from execution server");
             }
 
-            // ---------------- SAFE PARSING ----------------
+            // ---------------- SAFE RESPONSE HANDLING ----------------
             Object runObj = body.get("run");
 
             if (!(runObj instanceof Map)) {
@@ -81,7 +82,7 @@ public class CodeController {
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Server Error: " + e.getMessage());
+                    .body("Execution Error: " + e.getMessage());
         }
     }
 
@@ -98,7 +99,7 @@ public class CodeController {
         };
     }
 
-    // ---------------- FILE NAME FIX (IMPORTANT) ----------------
+    // ---------------- FILE NAME ----------------
     private String getFileName(String lang) {
 
         if (lang == null) return "Main.java";

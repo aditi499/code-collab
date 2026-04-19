@@ -29,19 +29,17 @@ public class CodeController {
 
             RestTemplate restTemplate = new RestTemplate();
 
-            // ---------------- PAYLOAD ----------------
+            // ✅ CORRECT PISTON FORMAT
             Map<String, Object> payload = new HashMap<>();
 
             payload.put("language", mapLanguage(req.language));
             payload.put("version", "*");
 
-            Map<String, Object> file = new HashMap<>();
-            file.put("name", getFileName(req.language));
+            Map<String, String> file = new HashMap<>();
             file.put("content", req.code);
 
             payload.put("files", new Object[]{file});
 
-            // ---------------- REQUEST ----------------
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -54,20 +52,21 @@ public class CodeController {
             Map body = response.getBody();
 
             if (body == null) {
-                return ResponseEntity.ok("No response from Piston API");
+                return ResponseEntity.ok("No response from API");
             }
 
-            Map run = (Map) body.get("run");
+            Object runObj = body.get("run");
 
-            if (run == null) {
-                return ResponseEntity.ok("Execution failed");
+            if (!(runObj instanceof Map)) {
+                return ResponseEntity.ok("Invalid response structure");
             }
+
+            Map run = (Map) runObj;
 
             String stdout = run.get("stdout") != null ? run.get("stdout").toString() : "";
             String stderr = run.get("stderr") != null ? run.get("stderr").toString() : "";
 
             if (!stderr.isEmpty()) return ResponseEntity.ok(stderr);
-
             if (!stdout.isEmpty()) return ResponseEntity.ok(stdout);
 
             return ResponseEntity.ok("No output");
@@ -88,18 +87,6 @@ public class CodeController {
             case "python" -> "python3";
             case "java" -> "java";
             default -> "java";
-        };
-    }
-
-    // ---------------- FILE NAME ----------------
-    private String getFileName(String lang) {
-
-        if (lang == null) return "Main.java";
-
-        return switch (lang.toLowerCase()) {
-            case "cpp", "c++" -> "main.cpp";
-            case "python" -> "main.py";
-            default -> "Main.java";
         };
     }
 }

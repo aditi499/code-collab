@@ -25,13 +25,15 @@ public class CodeHandler extends TextWebSocketHandler {
 
         JsonNode json = mapper.readTree(message.getPayload());
 
-        String type = json.has("type") ? json.get("type").asText() : "chat";
+        String type = json.has("type") ? json.get("type").asText() : "";
         String room = json.has("room") ? json.get("room").asText() : "";
         String user = json.has("user") ? json.get("user").asText() : "anonymous";
         String content = json.has("content") ? json.get("content").asText() : "";
 
-        // ---------------- JOIN ROOM ----------------
+        // ---------------- JOIN ----------------
         if ("join".equals(type)) {
+
+            if (room.isEmpty()) return;
 
             RoomManager.removeUserFromAllRooms(session);
 
@@ -43,28 +45,27 @@ public class CodeHandler extends TextWebSocketHandler {
             return;
         }
 
-        // ensure session tracked
-        if (!room.isEmpty()) {
-            sessionRoom.putIfAbsent(session, room);
-            RoomManager.addUser(room, session, user);
-        }
+        if (room.isEmpty()) return;
 
-        // ---------------- REAL-TIME CODE SYNC ----------------
+        sessionRoom.putIfAbsent(session, room);
+        RoomManager.addUser(room, session, user);
+
+        // ---------------- CODE SYNC (FIXED) ----------------
         if ("code".equals(type)) {
 
             Set<WebSocketSession> users = RoomManager.getRoom(room);
 
             for (WebSocketSession s : users) {
 
+                // send ONLY to others in same room
                 if (s.isOpen() && !s.equals(session)) {
-                    s.sendMessage(message); // forward raw message
+                    s.sendMessage(new TextMessage(message.getPayload()));
                 }
             }
-
             return;
         }
 
-        // ---------------- CHAT / DEFAULT MESSAGE ----------------
+        // ---------------- CHAT ----------------
         Message msg = new Message(type, room, user, content);
         String broadcastMsg = mapper.writeValueAsString(msg);
 
@@ -118,7 +119,6 @@ public class CodeHandler extends TextWebSocketHandler {
         }
     }
 
-    // ---------------- CLEANUP ----------------
     @Override
     public void afterConnectionClosed(WebSocketSession session,
                                       org.springframework.web.socket.CloseStatus status) {

@@ -130,6 +130,9 @@
 let editor;
 let socket = null;
 
+// 🚨 IMPORTANT FIX: prevents infinite update loop
+let isUpdating = false;
+
 const BASE_URL = "https://code-collab-production.up.railway.app";
 
 // ---------------- MONACO EDITOR ----------------
@@ -149,9 +152,10 @@ require(["vs/editor/editor.main"], function () {
         theme: "vs-dark"
     });
 
-    // ---------------- REAL-TIME SYNC (ADDED FIX) ----------------
+    // ---------------- REAL-TIME SYNC FIX ----------------
     editor.onDidChangeModelContent(() => {
 
+        if (isUpdating) return;
         if (!socket || socket.readyState !== 1) return;
 
         socket.send(JSON.stringify({
@@ -195,14 +199,17 @@ function joinRoom() {
         try {
             msg = JSON.parse(event.data);
         } catch (e) {
-            console.log("Invalid message:", event.data);
             return;
         }
 
-        // CODE SYNC
+        // ---------------- CODE SYNC FIX ----------------
         if (msg.type === "code" && msg.content) {
+
             if (editor.getValue() !== msg.content) {
+
+                isUpdating = true;
                 editor.setValue(msg.content);
+                isUpdating = false;
             }
         }
 

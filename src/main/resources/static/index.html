@@ -100,7 +100,9 @@
     <input id="room" placeholder="Room ID" />
     <input id="user" placeholder="Your Name" />
 
+    <button onclick="createRoom()">Create Room</button>
     <button onclick="joinRoom()">Join Room</button>
+    <button onclick="shareRoom()">Share Link</button>
 
     <span id="userCount">Users: 0</span>
 </div>
@@ -129,11 +131,42 @@
 
 let editor;
 let socket = null;
-
-// 🚨 IMPORTANT FIX: prevents infinite update loop
 let isUpdating = false;
 
 const BASE_URL = "https://code-collab-production.up.railway.app";
+
+// ---------------- AUTO ROOM FROM LINK ----------------
+window.onload = function () {
+    const params = new URLSearchParams(window.location.search);
+    const roomId = params.get("roomId");
+
+    if (roomId) {
+        document.getElementById("room").value = roomId;
+    }
+};
+
+// ---------------- CREATE ROOM ----------------
+function createRoom() {
+    const roomId = Math.random().toString(36).substring(2, 8);
+    document.getElementById("room").value = roomId;
+}
+
+// ---------------- SHARE ROOM ----------------
+function shareRoom() {
+
+    const room = document.getElementById("room").value.trim();
+
+    if (!room) {
+        alert("Enter or create a room first");
+        return;
+    }
+
+    const url = `${BASE_URL}/?roomId=${room}`;
+
+    navigator.clipboard.writeText(url)
+        .then(() => alert("Room link copied!"))
+        .catch(() => alert("Copy failed"));
+}
 
 // ---------------- MONACO EDITOR ----------------
 require.config({
@@ -152,7 +185,6 @@ require(["vs/editor/editor.main"], function () {
         theme: "vs-dark"
     });
 
-    // ---------------- REAL-TIME SYNC FIX ----------------
     editor.onDidChangeModelContent(() => {
 
         if (isUpdating) return;
@@ -202,31 +234,26 @@ function joinRoom() {
             return;
         }
 
-        // ---------------- CODE SYNC FIX ----------------
         if (msg.type === "code" && msg.content) {
 
             if (editor.getValue() !== msg.content) {
-
                 isUpdating = true;
                 editor.setValue(msg.content);
                 isUpdating = false;
             }
         }
 
-        // CHAT
         if (msg.type === "chat") {
             const div = document.createElement("div");
             div.innerText = `${msg.user}: ${msg.content}`;
             document.getElementById("messages").appendChild(div);
         }
 
-        // USERS
         if (msg.type === "users") {
             document.getElementById("userCount").innerText = "Users: " + msg.count;
             document.getElementById("users").innerText = (msg.users || []).join(", ");
         }
 
-        // SYSTEM
         if (msg.type === "system") {
             const div = document.createElement("div");
             div.style.color = "gray";
